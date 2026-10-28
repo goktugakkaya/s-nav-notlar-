@@ -85,11 +85,11 @@ mark{background:var(--mk);color:inherit;border-radius:2px;padding:0 1px}
 #gear,#mnav,#msheet,#mbd{display:none}
 @page{size:A4;margin:14mm}
 @media print{
- html,body{height:auto;background:#fff;display:block}
+ html,body{height:auto!important;background:#fff;display:block}
  header,.bar,#side,#src,#cards{display:none!important}
  main{display:block}#view{padding:0;overflow:visible}#pw{display:block!important}
  .page{box-shadow:none;max-width:none;padding:0;border-radius:0;margin:0}
- .unit+.unit{margin:0;padding:0;border:0}.pb .unit+.unit{break-before:page}
+ .unit+.unit{margin:0!important;padding:0!important;border:0!important}.pb .unit+.unit{break-before:page}
  .quiz strong:not(.on){color:inherit!important;background:none}.quiz strong.on{background:none}
  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
@@ -551,27 +551,39 @@ function setTab(t){
 }
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
 
-/* ---------- PDF (A4, 14mm kenar => 182x269mm) ---------- */
-const FULL=269/25.4*96,PH=FULL*0.9,PW=182/25.4*96;
-const setU=(u,z)=>{u.style.zoom='';u.style.width=(PW/z)+'px'};
-const hU=(u,z)=>{setU(u,z);return u.offsetHeight*z};
-function fit(u){if(hU(u,1)<=PH)return 1;let lo=.2,hi=1;for(let i=0;i<20;i++){const m=(lo+hi)/2;hU(u,m)<=PH?lo=m:hi=m}return lo}
+/* ---------- PDF (A4, 14mm kenar => 182x269mm) ----------
+   NOT: zoom'u .unit'in kendisine vermek Chrome'da yazdırmada ölçeği yok sayıp içeriği kesiyor.
+   Bu yüzden zoom ünitenin ÇOCUKLARINA (başlık, gövde, kapak) verilir; ünite sabit genişlikli kutu kalır. */
+const FULL=269/25.4*96,PH=FULL*0.95,PW=182/25.4*96;
+let printing=false;
+const zset=(u,z)=>[...u.children].forEach(c=>{c.style.zoom=z>=1?'':z});
+const hU=(u,z)=>{zset(u,z);return u.getBoundingClientRect().height};
+function fit(u){if(hU(u,1)<=PH)return 1;let lo=.2,hi=1;for(let i=0;i<22;i++){const m=(lo+hi)/2;hU(u,m)<=PH?lo=m:hi=m}return lo}
 function beforePrint(){
+ printing=true;
  setPn();setDocTitle();view.classList.remove('dk');if(window.CSS&&CSS.highlights)CSS.highlights.clear();
- Object.assign(page.style,{padding:'0',boxShadow:'none',maxWidth:'none',margin:'0'});
+ Object.assign(page.style,{padding:'0',boxShadow:'none',maxWidth:'none',margin:'0',width:PW+'px'});
  page.querySelectorAll('.unit').forEach(u=>{
-  let z=opt.sc==='auto'?fit(u):parseFloat(opt.sc);
-  setU(u,z);u.style.zoom=z;
-  if(opt.sc==='auto'){let n=0;while(n++<40&&u.getBoundingClientRect().height>FULL*0.97&&z>.2){z*=.97;setU(u,z);u.style.zoom=z}}
+  u.style.width='100%';
+  let z=opt.sc==='auto'?fit(u):parseFloat(opt.sc)||1;
+  zset(u,z);
+  if(opt.sc==='auto'){let n=0;while(n++<40&&u.getBoundingClientRect().height>FULL*0.97&&z>.2){z*=.97;zset(u,z)}}
  });
 }
 function afterPrint(){
- ['padding','boxShadow','maxWidth','margin'].forEach(k=>page.style[k]='');
- page.querySelectorAll('.unit').forEach(u=>{u.style.zoom='';u.style.width=''});
+ if(!printing)return;printing=false;
+ ['padding','boxShadow','maxWidth','margin','width'].forEach(k=>page.style[k]='');
+ page.querySelectorAll('.unit').forEach(u=>{zset(u,1);u.style.width=''});
  view.classList.toggle('dk',!!opt.dk);applyFind();
 }
 window.addEventListener('beforeprint',beforePrint);window.addEventListener('afterprint',afterPrint);
-$('pdf').onclick=()=>{if(isM())setPane('not');else if(tab==='cards')setTab('not');setTimeout(()=>window.print(),50)};
+/* afterprint tetiklenmeyen tarayıcılar (iOS vb.) için: sayfaya ilk dokunuşta önizlemeyi eski haline getir */
+['pointerdown','keydown'].forEach(ev=>window.addEventListener(ev,()=>{if(printing)afterPrint()},true));
+$('pdf').onclick=()=>{
+ if(isM())setPane('not');else if(tab==='cards')setTab('not');
+ /* beforeprint tetiklenmese de ölçek uygulansın; tetiklenirse zaten aynı işlem tekrarlanır */
+ setTimeout(()=>{beforePrint();window.print()},50);
+};
 
 /* ---------- başlangıç ---------- */
 if(!docs.length){const old=LS('note',null);try{const o=localStorage.getItem('note');if(o){addDoc('Notum',o)}}catch(e){}}
@@ -588,6 +600,7 @@ function setPane(p){
  if(p==='not'||p==='quiz'||p==='cards')setTab(p);
 }
 function layout(){
+ if(printing)return;/* yazdırırken sayfa genişliği <=860px görünür; yeniden çizip ölçeği silmesin */
  if(isM()){ms.append(hg1,hg2,bar);if(!document.body.dataset.pane)setPane(cur()?'not':'list');else setPane(document.body.dataset.pane)}
  else{hdr.insertBefore(hg1,hdr.querySelector('.tabs'));hdr.insertBefore(hg2,$('gear'));hdr.after(bar);document.body.classList.remove('sheet');delete document.body.dataset.pane}
 }
