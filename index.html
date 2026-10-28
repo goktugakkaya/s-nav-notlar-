@@ -2,6 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow,noarchive">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sınav Notu → PDF</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -179,6 +180,7 @@ header h1::before{content:"";display:inline-block;width:11px;height:11px;border-
  #msheet .bar button,#msheet .bar .btn{flex:1 1 40%;text-align:center}
 }
 @media print{#mnav,#msheet,#mbd,#gear{display:none!important}main{position:static!important;margin:0!important;overflow:visible!important}#view{display:block!important;position:static!important;height:auto!important}}
+
 </style>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📝%3C/text%3E%3C/svg%3E">
 </head>
@@ -189,6 +191,7 @@ header h1::before{content:"";display:inline-block;width:11px;height:11px;border-
  <div class="tabs"><button data-t="not" class="on">Not</button><button data-t="quiz">Sınav</button><button data-t="cards">Kartlar</button></div>
  <div id="hg2"><input id="title" type="text" placeholder="Belge başlığı (isteğe bağlı)">
  <input id="sub" type="text" placeholder="Alt satır (ders, tarih…)">
+ <select id="ex" title="PDF dosya adına eklenir"><option value="">Sınav türü: —</option><option>Vize</option><option>Final</option><option>Bütünleme</option></select>
  <span class="sp"></span>
  <label>PDF ölçeği
   <select data-o="sc"><option value="auto">Her üniteyi tek sayfaya sığdır</option><option value="1">%100</option><option value="0.95">%95</option><option value="0.9">%90</option><option value="0.85">%85</option><option value="0.8">%80</option><option value="0.75">%75</option><option value="0.7">%70</option><option value="0.65">%65</option><option value="0.6">%60</option><option value="0.55">%55</option><option value="0.5">%50</option></select></label></div>
@@ -277,7 +280,7 @@ function enterCourse(id,skipSave){
  if(!skipSave){const o=crs();if(o){o.act=act;o.t=opt.t;o.s=opt.s}}
  acId=id;const c=crs();docs=c.docs;
  act=c.docs.some(d=>d.id===c.act)?c.act:(c.docs[0]?c.docs[0].id:null);
- opt.t=c.t||'';opt.s=c.s||'';$('title').value=opt.t;$('sub').value=opt.s;
+ opt.t=c.t||'';opt.s=c.s||'';$('title').value=opt.t;$('sub').value=opt.s;syncEx();
  q='';$('q').value='';loadEd();render();
 }
 function courseClick(e){
@@ -326,7 +329,7 @@ function addDoc(name,md){const d={id:String(Date.now()+Math.random()),name,md,in
 function loadEd(){const d=cur();src.value=d?d.md:'';src.disabled=!d}
 src.addEventListener('input',()=>{const d=cur();if(!d)return;d.md=src.value;render()});
 async function importFiles(fs){
- for(const f of fs){if(/\.json$/i.test(f.name)){await restoreJson(f);continue}const md=await f.text();const m=md.match(/^#\s+(.+)$/m);addDoc(m?m[1].trim():pretty(f.name),md)}
+ for(const f of fs){if(/\.json$/i.test(f.name)){await restoreJson(f);continue}const md=await f.text();const m=md.match(/^#\s+(.+)$/m);addDoc(m?m[1].trim():pretty(f.name),md);const cc=crs();if(!cc.ex){const tt=(m?m[1]:'')+' '+f.name;const x=/b[üu]t[üu]nleme/i.test(tt)?'Bütünleme':/final/i.test(tt)?'Final':/vize|ara s[ıi]nav/i.test(tt)?'Vize':'';if(x){cc.ex=x;syncEx()}}}
  side();loadEd();render();
 }
 $('file').addEventListener('change',e=>{importFiles([...e.target.files]);e.target.value=''});
@@ -363,7 +366,7 @@ function mkUnit(d,i){
  return u;
 }
 function setPn(){
- const nm=(crs()?crs().name:'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]+/g,' ');
+ const nm=(crs()?crs().name+(crs().ex?' · '+crs().ex+' Notları':''):'').replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/[\r\n]+/g,' ');
  $('pnst').textContent=opt.pn?'@page{size:A4;margin:14mm;@bottom-center{content:'+(nm?'"'+nm+'  ·  " ':'')+'counter(page);font:9pt Inter,sans-serif;color:#667085}}':'';
 }
 function build(){
@@ -378,7 +381,13 @@ function build(){
  if(cover.firstChild)us[0].insertBefore(cover,us[0].firstChild);
  us.forEach(u=>page.appendChild(u));
 }
-function render(){const st=view.scrollTop;build();save();view.scrollTop=st;applyFind()}
+const exOf=()=>crs()&&crs().ex||'';
+const exLabel=()=>exOf()?exOf()+' Notları':'';
+const fileTitle=()=>[crs()?crs().name:'',exLabel()].filter(Boolean).join(' - ')||'Sınav Notu';
+const setDocTitle=()=>{document.title=fileTitle()};
+function syncEx(){$('ex').value=exOf()}
+$('ex').addEventListener('change',e=>{crs().ex=e.target.value;render()});
+function render(){const st=view.scrollTop;build();save();view.scrollTop=st;applyFind();setDocTitle()}
 
 /* ---------- ayarlar ---------- */
 document.querySelectorAll('[data-o]').forEach(el=>{
@@ -501,7 +510,7 @@ $('bk').onclick=()=>{
 };
 function syncUi(){
  document.querySelectorAll('[data-o]').forEach(el=>{const k=el.dataset.o;if(el.type==='checkbox')el.checked=!!opt[k];else el.value=opt[k]});
- $('title').value=opt.t||'';$('sub').value=opt.s||'';applyUi();
+ $('title').value=opt.t||'';$('sub').value=opt.s||'';syncEx();applyUi();
 }
 async function restoreJson(f){
  try{
@@ -516,7 +525,7 @@ async function restoreJson(f){
   const ph=(Array.isArray(o.courses)&&courses.length===1&&!courses[0].docs.length)?courses[0]:null;/* boş başlangıç dersi */
   inc.forEach(c=>{
    let tg=c.id!=null?courses.find(x=>x.id===String(c.id)):crs();
-   if(!tg){tg={id:String(c.id),name:String(c.name||'Ders'),docs:[],act:null,t:String(c.t||''),s:String(c.s||'')};courses.push(tg)}
+   if(!tg){tg={id:String(c.id),name:String(c.name||'Ders'),docs:[],act:null,t:String(c.t||''),s:String(c.s||''),ex:String(c.ex||'')};courses.push(tg)}
    clean(c.docs).forEach(n=>{const i=tg.docs.findIndex(x=>x.id===n.id);if(i>=0)tg.docs[i]=n;else tg.docs.push(n)});
   });
   if(o.opt&&typeof o.opt==='object'){const {t,s:_s,...ro}=o.opt;Object.assign(opt,ro)}
@@ -541,7 +550,7 @@ const setU=(u,z)=>{u.style.zoom='';u.style.width=(PW/z)+'px'};
 const hU=(u,z)=>{setU(u,z);return u.offsetHeight*z};
 function fit(u){if(hU(u,1)<=PH)return 1;let lo=.2,hi=1;for(let i=0;i<20;i++){const m=(lo+hi)/2;hU(u,m)<=PH?lo=m:hi=m}return lo}
 function beforePrint(){
- setPn();view.classList.remove('dk');if(window.CSS&&CSS.highlights)CSS.highlights.clear();
+ setPn();setDocTitle();view.classList.remove('dk');if(window.CSS&&CSS.highlights)CSS.highlights.clear();
  Object.assign(page.style,{padding:'0',boxShadow:'none',maxWidth:'none',margin:'0'});
  page.querySelectorAll('.unit').forEach(u=>{
   let z=opt.sc==='auto'?fit(u):parseFloat(opt.sc);
@@ -584,7 +593,7 @@ $('list').addEventListener('click',e=>{if(isM()&&wasNotes&&e.target.closest('.it
 $('addb').addEventListener('click',()=>{const n=smode==='notes';wasNotes=n;if(isM()&&n)setPane('edit')},true);
 $('file').addEventListener('change',()=>{if(isM())setTimeout(()=>setPane('not'),300)});
 if(mq.addEventListener)mq.addEventListener('change',layout);
-layout();
+layout();syncEx();setDocTitle();
 </script>
 </body>
 </html>
