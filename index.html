@@ -85,11 +85,11 @@ mark{background:var(--mk);color:inherit;border-radius:2px;padding:0 1px}
 #gear,#mnav,#msheet,#mbd{display:none}
 @page{size:A4;margin:14mm}
 @media print{
- html,body{height:auto!important;background:#fff;display:block}
+ html,body{height:auto;background:#fff;display:block}
  header,.bar,#side,#src,#cards{display:none!important}
  main{display:block}#view{padding:0;overflow:visible}#pw{display:block!important}
  .page{box-shadow:none;max-width:none;padding:0;border-radius:0;margin:0}
- .unit+.unit{margin:0!important;padding:0!important;border:0!important}.pb .unit+.unit{break-before:page}
+ .unit+.unit{margin:0;padding:0;border:0}.pb .unit+.unit{break-before:page}
  .quiz strong:not(.on){color:inherit!important;background:none}.quiz strong.on{background:none}
  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
@@ -181,6 +181,10 @@ header h1::before{content:"";display:inline-block;width:11px;height:11px;border-
 }
 @media print{#mnav,#msheet,#mbd,#gear{display:none!important}main{position:static!important;margin:0!important;overflow:visible!important}#view{display:block!important;position:static!important;height:auto!important}}
 
+/* ölçüm modu: yazdırma geometrisini taklit eder */
+.pm{padding:0!important;box-shadow:none!important;max-width:none!important;margin:0!important;border-radius:0!important}
+.pm .unit+.unit{margin:0;padding:0;border:0}.pm .unit+.unit::before{display:none}
+@media print{.dk .page:not(.th-mono){background:#fff!important;color:#1d2433!important;--c1b:#eaf0ff;--c2b:#fff6e0;--c3b:#fdeceb;--c4b:#e8f6ee}.dk .page code,.dk .page th{background:#eef1f6}.dk .page .sh{background:#fff6!important}}
 </style>
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
@@ -394,7 +398,7 @@ const fileTitle=()=>[crs()?crs().name:'',exLabel()].filter(Boolean).join(' - ')|
 const setDocTitle=()=>{document.title=fileTitle()};
 function syncEx(){$('ex').value=exOf()}
 $('ex').addEventListener('change',e=>{crs().ex=e.target.value;render()});
-function render(){const st=view.scrollTop;build();save();view.scrollTop=st;applyFind();setDocTitle()}
+function render(){const st=view.scrollTop;build();save();view.scrollTop=st;applyFind();setDocTitle();if(typeof fitSoon==='function')fitSoon()}
 
 /* ---------- ayarlar ---------- */
 document.querySelectorAll('[data-o]').forEach(el=>{
@@ -551,39 +555,42 @@ function setTab(t){
 }
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.t));
 
-/* ---------- PDF (A4, 14mm kenar => 182x269mm) ----------
-   NOT: zoom'u .unit'in kendisine vermek Chrome'da yazdırmada ölçeği yok sayıp içeriği kesiyor.
-   Bu yüzden zoom ünitenin ÇOCUKLARINA (başlık, gövde, kapak) verilir; ünite sabit genişlikli kutu kalır. */
-const FULL=269/25.4*96,PH=FULL*0.95,PW=182/25.4*96;
-let printing=false;
-const zset=(u,z)=>[...u.children].forEach(c=>{c.style.zoom=z>=1?'':z});
-const hU=(u,z)=>{zset(u,z);return u.getBoundingClientRect().height};
-function fit(u){if(hU(u,1)<=PH)return 1;let lo=.2,hi=1;for(let i=0;i<22;i++){const m=(lo+hi)/2;hU(u,m)<=PH?lo=m:hi=m}return lo}
-function beforePrint(){
- printing=true;
- setPn();setDocTitle();view.classList.remove('dk');if(window.CSS&&CSS.highlights)CSS.highlights.clear();
- Object.assign(page.style,{padding:'0',boxShadow:'none',maxWidth:'none',margin:'0',width:PW+'px'});
- page.querySelectorAll('.unit').forEach(u=>{
-  u.style.width='100%';
-  let z=opt.sc==='auto'?fit(u):parseFloat(opt.sc)||1;
-  zset(u,z);
-  if(opt.sc==='auto'){let n=0;while(n++<40&&u.getBoundingClientRect().height>FULL*0.97&&z>.2){z*=.97;zset(u,z)}}
+/* ---------- PDF (A4, 14mm kenar => 182x269mm) ---------- */
+const FULL=269/25.4*96,PH=FULL*0.9,PW=182/25.4*96;
+const setU=(u,z)=>{u.style.zoom='';u.style.width=(PW/z)+'px'};
+const hU=(u,z)=>{setU(u,z);return u.offsetHeight*z};
+function fit(u){if(hU(u,1)<=PH)return 1;let lo=.2,hi=1;for(let i=0;i<20;i++){const m=(lo+hi)/2;hU(u,m)<=PH?lo=m:hi=m}return lo}
+/* Ölçek CSS'i önceden hesaplanır ve yalnızca @media print içinde geçerli olur.
+   Böylece yazdırma penceresi beforeprint olayını beklemeden doğru ölçekle açılır. */
+const fitst=document.createElement('style');fitst.id='fitst';document.head.appendChild(fitst);
+let fitTimer=null;
+function fitCss(){
+ if(!page.offsetParent)return;            // görünmüyorsa (ör. mobilde başka sekme) ölçme
+ const us=[...page.querySelectorAll('.unit')];
+ if(!us.length){fitst.textContent='';return}
+ page.classList.add('pm');
+ let css='';
+ us.forEach(u=>{
+  let z=opt.sc==='auto'?fit(u):(parseFloat(opt.sc)||1);
+  setU(u,z);
+  if(opt.sc==='auto'){let n=0;u.style.zoom=z;while(n++<40&&u.getBoundingClientRect().height>FULL*0.97&&z>.2){z*=.97;setU(u,z);u.style.zoom=z}}
+  u.style.zoom='';u.style.width='';
+  css+='#'+u.id+'{zoom:'+z.toFixed(4)+';width:'+(PW/z).toFixed(2)+'px}';
  });
+ page.classList.remove('pm');
+ fitst.textContent='@media print{'+css+'}';
+}
+function fitSoon(){clearTimeout(fitTimer);fitTimer=setTimeout(fitCss,180)}
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitSoon);
+window.addEventListener('load',fitSoon);
+function beforePrint(){
+ setPn();setDocTitle();fitCss();view.classList.remove('dk');if(window.CSS&&CSS.highlights)CSS.highlights.clear();
 }
 function afterPrint(){
- if(!printing)return;printing=false;
- ['padding','boxShadow','maxWidth','margin','width'].forEach(k=>page.style[k]='');
- page.querySelectorAll('.unit').forEach(u=>{zset(u,1);u.style.width=''});
  view.classList.toggle('dk',!!opt.dk);applyFind();
 }
 window.addEventListener('beforeprint',beforePrint);window.addEventListener('afterprint',afterPrint);
-/* afterprint tetiklenmeyen tarayıcılar (iOS vb.) için: sayfaya ilk dokunuşta önizlemeyi eski haline getir */
-['pointerdown','keydown'].forEach(ev=>window.addEventListener(ev,()=>{if(printing)afterPrint()},true));
-$('pdf').onclick=()=>{
- if(isM())setPane('not');else if(tab==='cards')setTab('not');
- /* beforeprint tetiklenmese de ölçek uygulansın; tetiklenirse zaten aynı işlem tekrarlanır */
- setTimeout(()=>{beforePrint();window.print()},50);
-};
+$('pdf').onclick=()=>{if(isM())setPane('not');else if(tab==='cards')setTab('not');setTimeout(()=>{setPn();setDocTitle();fitCss();window.print()},80)};
 
 /* ---------- başlangıç ---------- */
 if(!docs.length){const old=LS('note',null);try{const o=localStorage.getItem('note');if(o){addDoc('Notum',o)}}catch(e){}}
@@ -600,7 +607,6 @@ function setPane(p){
  if(p==='not'||p==='quiz'||p==='cards')setTab(p);
 }
 function layout(){
- if(printing)return;/* yazdırırken sayfa genişliği <=860px görünür; yeniden çizip ölçeği silmesin */
  if(isM()){ms.append(hg1,hg2,bar);if(!document.body.dataset.pane)setPane(cur()?'not':'list');else setPane(document.body.dataset.pane)}
  else{hdr.insertBefore(hg1,hdr.querySelector('.tabs'));hdr.insertBefore(hg2,$('gear'));hdr.after(bar);document.body.classList.remove('sheet');delete document.body.dataset.pane}
 }
